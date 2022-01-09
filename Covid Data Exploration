@@ -1,0 +1,154 @@
+SELECT *
+FROM PortfolioProject..CovidDeaths
+Where continent is not null
+order by 3,4
+
+--SELECT *
+--FROM PortfolioProject..CovidVaccinations
+--order by 3,4
+
+--Select Data
+Select Location, date, total_cases, new_cases, total_deaths, population
+From PortfolioProject..CovidDeaths
+Order by 1,2
+
+--Total Cases vs Total Deaths
+Select Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 "Death Percentage"
+From PortfolioProject..CovidDeaths
+where location like '%kingdom%'
+Order by 1,2
+
+--Total Cases vs Population
+Select Location, date, population, total_cases,  (total_cases/population)*100 "Case Percentage"
+From PortfolioProject..CovidDeaths
+where location like '%kingdom%'
+Order by 1,2
+
+--Highest Infection Rates as a % of population
+Select Location, population, MAX(total_cases) "Highest Infection Count",  MAX((total_cases/population))*100 "Case Percentage"
+From PortfolioProject..CovidDeaths
+Group by location, population
+Order by "Case Percentage" desc
+
+--Highest Death Rates as a % of population
+Select Location, population, MAX(total_deaths) "Highest Infection Count",  MAX((total_deaths/population))*100 "Deaths Percentage"
+From PortfolioProject..CovidDeaths
+Group by location, population
+Order by "Deaths Percentage" desc
+
+--Groupings exist in location which is unwanted
+Select Location, MAX(cast(total_deaths as int)) "Total Deaths"
+From PortfolioProject..CovidDeaths
+Group by location
+Order by "Total Deaths" desc
+
+--Discounting weird NULL values leading to unwanted groupings of data
+Select Location, MAX(cast(total_deaths as int)) "Total Deaths"
+From PortfolioProject..CovidDeaths
+Where continent is not null
+Group by location
+Order by "Total Deaths" desc
+
+--Contintents - bad grouping -NA is just usa
+Select continent, MAX(cast(total_deaths as int)) "Total Deaths"
+From PortfolioProject..CovidDeaths
+Where continent is not null
+Group by continent
+Order by "Total Deaths" desc
+
+--weird ones,
+Select location, MAX(cast(total_deaths as int)) "Total Deaths"
+From PortfolioProject..CovidDeaths
+Where continent is null
+Group by location
+Order by "Total Deaths" desc
+
+--World daily
+Select date, sum(new_cases) "Total Cases", sum(cast(new_deaths as int)) "Total Deaths", sum(cast(new_deaths as int))/sum(new_cases)*100 "Death Percentage"
+From PortfolioProject..CovidDeaths
+Where continent is not null
+Group by date
+Order by 1,2
+
+--World In total
+Select  sum(new_cases) "Total Cases", sum(cast(new_deaths as int)) "Total Deaths", sum(cast(new_deaths as int))/sum(new_cases)*100 "Death Percentage"
+From PortfolioProject..CovidDeaths
+Where continent is not null
+--Group by date
+Order by 1,2
+
+
+--Total population vs Vaccination - partition breaks it up for each country - bigint as total value gets too large for int
+Select death.continent, death.location, death.date, death.population, vacc.new_vaccinations,
+sum(convert(bigint,vacc.new_vaccinations)) OVER (Partition by death.location Order by death.location, death.date) "Cumulative Vaccinations",
+("Cumulative Vaccinations"/population)*100
+From PortfolioProject..CovidDeaths death
+Join PortfolioProject..CovidVaccinations vacc
+	On Death.location = vacc.location
+	and death.date = vacc.date
+	where death.continent is not null
+	order by 2,3
+
+--use CT
+With PopvsVac (continent, location, date, population, new_vaccinations, Cumulative_Vaccinations)
+as
+(
+Select death.continent, death.location, death.date, death.population, vacc.new_vaccinations,
+sum(convert(bigint,vacc.new_vaccinations)) OVER (Partition by death.location Order by death.location, death.date) Cumulative_Vaccinations
+--,("Cumulative Vaccinations"/population)*100
+From PortfolioProject..CovidDeaths death
+Join PortfolioProject..CovidVaccinations vacc
+	On Death.location = vacc.location
+	and death.date = vacc.date
+	where death.continent is not null
+	--order by 2,3
+)
+Select *, (Cumulative_Vaccinations/population)*100
+From PopvsVac
+
+--using a temp table instead
+
+DROP Table if exists #PercentPopVac
+Create Table #PercentPopVac
+(
+	Continent nvarchar(255),
+	Location nvarchar(255),
+	Date datetime,
+	Population numeric,
+	New_vaccinations numeric,
+	Cumulative_Vaccinations numeric
+)
+
+Insert into #PercentPopVac
+
+
+Select death.continent, death.location, death.date, death.population, vacc.new_vaccinations,
+sum(convert(bigint,vacc.new_vaccinations)) OVER (Partition by death.location Order by death.location, death.date) Cumulative_Vaccinations
+--,("Cumulative Vaccinations"/population)*100
+From PortfolioProject..CovidDeaths death
+Join PortfolioProject..CovidVaccinations vacc
+	On Death.location = vacc.location
+	and death.date = vacc.date
+	--where death.continent is not null
+	--order by 2,3
+
+
+Select *, (Cumulative_Vaccinations/population)*100
+From #PercentPopVac
+
+
+--Creating a View for Tableu data visualisation
+
+Create view PercentPopVac as
+Select death.continent, death.location, death.date, death.population, vacc.new_vaccinations,
+sum(convert(bigint,vacc.new_vaccinations)) OVER (Partition by death.location Order by death.location, death.date) Cumulative_Vaccinations
+--,("Cumulative Vaccinations"/population)*100
+From PortfolioProject..CovidDeaths death
+Join PortfolioProject..CovidVaccinations vacc
+	On Death.location = vacc.location
+	and death.date = vacc.date
+where death.continent is not null
+--order by 2,3
+
+Select *
+From PercentPopVac
